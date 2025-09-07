@@ -1,0 +1,22 @@
+{
+  "name": "@repo/common",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch run index.ts",
+    "build": "bun build index.ts --outdir dist",
+    "test": "bun run dist/index.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/redis": "^4.0.11"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "redis": "^5.8.2",
+    "zod": "^4.1.5"
+  }
+}
