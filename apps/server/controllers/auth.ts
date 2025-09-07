@@ -2,10 +2,12 @@ import { SigninSchema } from "@repo/common";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import type { Request, Response } from "express";
 import {
+  COOKIE_EXPIRY,
   DEVELOPMENT_URL,
   JWT_SECRET,
   NODE_ENV,
   PRODUCTION_URL,
+  TOKEN_EXPIRY,
 } from "../config";
 import { sendToEmail } from "../utils/mail";
 
@@ -21,14 +23,16 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const token = jwt.sign({ email: data?.email }, JWT_SECRET!);
+    const token = jwt.sign({ email: data?.email }, JWT_SECRET!, {
+      expiresIn: TOKEN_EXPIRY,
+    });
 
     if (NODE_ENV === "production") {
       await sendToEmail(token);
     } else {
       console.log(
         `Please visit this link to login: 
-            ${DEVELOPMENT_URL}/api/v1/signin/post?token=${token}`
+            ${DEVELOPMENT_URL}/api/v1/auth/signin/post?token=${token}`
       );
     }
 
@@ -58,14 +62,16 @@ export const signin = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const token = jwt.sign({ email: data?.email }, JWT_SECRET!);
+    const token = jwt.sign({ email: data?.email }, JWT_SECRET!, {
+      expiresIn: TOKEN_EXPIRY,
+    });
 
     if (NODE_ENV === "production") {
       await sendToEmail(token);
     } else {
       console.log(
         `Please visit this link to login: 
-              ${DEVELOPMENT_URL}/api/v1/auth/signin/post?token=${token}`
+        ${DEVELOPMENT_URL}/api/v1/auth/signin/post?token=${token}`
       );
     }
 
@@ -108,7 +114,11 @@ export const setTokenCookie = async (
       return;
     }
 
-    res.cookie("token", token, {
+    const sessionToken = jwt.sign({ email }, JWT_SECRET!, {
+      expiresIn: COOKIE_EXPIRY,
+    });
+
+    res.cookie("token", sessionToken, {
       httpOnly: true,
       secure: NODE_ENV === "production",
       sameSite: "strict",

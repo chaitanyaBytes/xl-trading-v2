@@ -6,3 +6,6 @@ export const PORT = config.backend.PORT;
 export const NODE_ENV = config.backend.NODE_ENV;
 export const JWT_SECRET = config.backend.JWT_SECRET;
 export const RESEND_API_KEY = config.resend.RESEND_API_KEY;
+
+export const TOKEN_EXPIRY = "10m";
+export const COOKIE_EXPIRY = "7d";
