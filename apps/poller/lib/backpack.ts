@@ -1,4 +1,6 @@
 import { config } from "@repo/common";
+import type { Trade } from "../types";
+import { latestPrices } from "../store";
 
 export const DECIMALS = 6;
 
@@ -34,10 +36,24 @@ export const pricePoller = (pairs: string[]) => {
       try {
         const parsedData = JSON.parse(event.data);
 
-        const tickerData = parsedData ?? parsedData.data;
+        const tickerData: Trade = parsedData.data ?? parsedData;
 
+        if (tickerData.e === "bookTicker") {
+          const symbol = tickerData.s;
+          const ask = BigInt(
+            Math.round(parseFloat(tickerData.a) * Math.pow(10, DECIMALS))
+          );
+          const bid = BigInt(
+            Math.round(parseFloat(tickerData.b) * Math.pow(10, DECIMALS))
+          );
+          const price = (ask + bid) / 2n;
+
+          latestPrices[symbol] = { price: price, decimals: DECIMALS };
+        }
         console.log(JSON.stringify(tickerData));
-      } catch {}
+      } catch (error: any) {
+        console.error("Ws parsing error: ", error);
+      }
     };
 
     ws.onclose = () => {
