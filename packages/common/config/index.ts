@@ -18,4 +18,7 @@ export const config = {
   backpack: {
     BACKPACK_URL: process.env.BACKPACK_URL,
   },
+  database: {
+    DATABASE_URL: process.env.DATABASE_URL,
+  },
 };

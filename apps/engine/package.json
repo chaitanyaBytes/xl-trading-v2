@@ -12,7 +12,9 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "@repo/common": "workspace:*",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@repo/common": "workspace:*"
   }
 }
