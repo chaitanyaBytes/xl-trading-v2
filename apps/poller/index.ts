@@ -45,7 +45,9 @@ setInterval(async () => {
       "10000",
       "*",
       "data",
-      JSON.stringify(payload)
+      JSON.stringify(payload, (k, v) => {
+        return typeof v === "bigint" ? v.toString() : v;
+      })
     );
   }
 }, 100);
