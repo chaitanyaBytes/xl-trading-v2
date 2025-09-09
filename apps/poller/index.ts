@@ -28,7 +28,7 @@ startPricePoller().catch(console.error);
 
 setInterval(async () => {
   const price_updates = Object.entries(latestPrices).map(([symbol, data]) => ({
-    asset: symbol.split("_")[0]!,
+    asset: symbol,
     price: data.price,
     decimals: DECIMALS,
   }));
