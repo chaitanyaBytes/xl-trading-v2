@@ -20,6 +20,16 @@ export class UserBalanceStore {
     return balance;
   }
 
+  addBalance(emailId: string, amount: bigint): boolean {
+    const userBalance = this.userBalances.get(emailId);
+
+    if (!userBalance) return false;
+
+    userBalance.availableBalance += amount;
+    this.userBalances.set(emailId, userBalance);
+    return true;
+  }
+
   lockMargin(email: string, amount: bigint): boolean {
     const balance = this.userBalances.get(email);
     if (!balance || balance.availableBalance < amount) return false;
