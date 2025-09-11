@@ -41,16 +41,17 @@ export const pricePoller = (pairs: string[]) => {
 
         if (tickerData.e === "bookTicker") {
           const symbol = tickerData.s;
-          const askPrice = BigInt(
+          const marketPrice = BigInt(
             Math.round(parseFloat(tickerData.a) * Math.pow(10, DECIMALS))
           );
 
-          const { ask, bid } = applySpread(askPrice);
+          const { ask, bid } = applySpread(marketPrice);
 
           const tickData: LivePriceFeed = {
             asset: symbol,
             bidPrice: bid,
             askPrice: ask,
+            marketPrice: marketPrice,
             decimal: DECIMALS,
             spreadBP: 100n,
           };

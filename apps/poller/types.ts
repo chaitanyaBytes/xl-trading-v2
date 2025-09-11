@@ -14,6 +14,7 @@ export type LivePriceFeed = {
   asset: string;
   bidPrice: bigint;
   askPrice: bigint;
+  marketPrice: bigint;
   decimal: number;
   spreadBP: bigint;
 };
