@@ -1,2 +1,3 @@
-export const latestPrices: Record<string, { price: bigint; decimals: number }> =
-  {};
+import type { LivePriceFeed } from "./types";
+
+export const latestPrices: Record<string, LivePriceFeed> = {};

@@ -9,3 +9,11 @@ export type Trade = {
   u: string; // Update ID of event
   T: number; // Engine timestamp in microseconds
 };
+
+export type LivePriceFeed = {
+  asset: string;
+  bidPrice: bigint;
+  askPrice: bigint;
+  decimal: number;
+  spreadBP: bigint;
+};

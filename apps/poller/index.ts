@@ -1,6 +1,7 @@
 import { DECIMALS, pricePoller } from "./lib/backpack";
 import { latestPrices } from "./store";
 import { streamHelpers, QUEUE_NAMES } from "@repo/common";
+import type { LivePriceFeed } from "./types";
 
 const PAIRS = ["BTC_USDC", "SOL_USDC", "ETH_USDC"];
 
@@ -27,14 +28,21 @@ process.on("SIGINT", async () => {
 startPricePoller().catch(console.error);
 
 setInterval(async () => {
-  const price_updates = Object.entries(latestPrices).map(([symbol, data]) => ({
-    asset: symbol,
-    price: data.price,
-    decimals: DECIMALS,
-  }));
+  const price_updates: LivePriceFeed[] = Object.entries(latestPrices).map(
+    ([symbol, data]) => ({
+      ...data,
+    })
+  );
 
   if (price_updates.length > 0) {
-    const payload = price_updates;
+    const payload = {
+      reqId: "no-return",
+      type: "price-update",
+      tradePrices: JSON.stringify(price_updates, (k, v) => {
+        return typeof v === "bigint" ? v.toString() : v;
+      }),
+    };
+
     console.log("payload: ", payload);
 
     // pass data to redis streams using helper
