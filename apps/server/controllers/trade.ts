@@ -1,0 +1,213 @@
+import {
+  QUEUE_NAMES,
+  streamHelpers,
+  redisClient,
+  createOrderSchema,
+  type CreateOrder,
+  type Order,
+} from "@repo/common";
+import type { Request, Response } from "express";
+
+// Place a new trade order
+export const openOrder = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    const validation = createOrderSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      res.status(411).json({
+        success: false,
+        error: `Invalid input: ${validation.error}`,
+      });
+    }
+
+    const order: CreateOrder = validation.data!;
+
+    // Validate order type specific fields
+    if (order.orderType === "limit" && !order.limitPrice) {
+      res.status(400).json({
+        success: false,
+        error: "Limit price required for limit orders",
+      });
+      return;
+    }
+
+    // Generate unique order ID
+    const orderId = `order_${Date.now()}_${crypto.randomUUID()}`;
+
+    // Create order object
+    const orderData: Order = {
+      orderId,
+      emailId: userEmail,
+      asset: order.asset,
+      type: "open", // or "close" for closing positions
+      side: order.side, // "buy" or "sell"
+      orderType: order.orderType, // "market" or "limit"
+      size: BigInt(order.size), // Convert to string for Redis
+      leverage: order.leverage,
+      limitPrice: order.limitPrice ? BigInt(order.limitPrice) : undefined,
+      status: "pending",
+      timestamp: Date.now(),
+    };
+
+    // Send order to trade_receive stream for processing by engine
+    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, orderData);
+
+    console.log(`Order ${orderId} submitted to trade stream`);
+
+    // Return immediate response with order ID
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId,
+        status: "submitted",
+        message: "Order submitted for processing",
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    console.error("Error placing order:", error);
+    res.status(500).json({
+      success: false,
+      error: `Error placing order: ${error}`,
+    });
+  }
+};
+
+// Get user's order history
+export const getOrderHistory = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    // Query order history from Redis
+    const ordersKey = `user_orders:${userEmail}`;
+    const orders = await redisClient.lrange(ordersKey, 0, -1);
+
+    const orderHistory = orders.map((order) => JSON.parse(order));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orders: orderHistory,
+        count: orderHistory.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting order history:", error);
+    res.status(500).json({
+      success: false,
+      error: `Error getting order history: ${error}`,
+    });
+  }
+};
+
+// Get user's positions
+export const getPositions = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    // Query positions from Redis
+    const positionsKey = `user_positions:${userEmail}`;
+    const positions = await redisClient.lrange(positionsKey, 0, -1);
+
+    const userPositions = positions.map((pos) => JSON.parse(pos));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        positions: userPositions,
+        count: userPositions.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting positions:", error);
+    res.status(500).json({
+      success: false,
+      error: `Error getting positions: ${error}`,
+    });
+  }
+};
+
+// Close a position
+export const closePosition = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+  const { positionId } = req.params;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    if (!positionId) {
+      res.status(400).json({
+        success: false,
+        error: "Position ID required",
+      });
+      return;
+    }
+
+    // Generate close order
+    const orderId = `close_${Date.now()}_${crypto.randomUUID()}`;
+
+    const closeOrderData = {
+      orderId,
+      emailId: userEmail,
+      type: "close",
+      positionId,
+      orderType: "market", // Close at market price
+      status: "pending",
+      timestamp: Date.now(),
+    };
+
+    // Send close order to trade_receive stream
+    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, closeOrderData);
+
+    console.log(`Close order ${orderId} submitted for position ${positionId}`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId,
+        positionId,
+        status: "submitted",
+        message: "Close order submitted for processing",
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    console.error("Error closing position:", error);
+    res.status(500).json({
+      success: false,
+      error: `Error closing position: ${error}`,
+    });
+  }
+};

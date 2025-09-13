@@ -27,6 +27,6 @@ export async function authMiddleware(
     return;
   }
 
-  (req as any).user = { email };
+  req.user = { email };
   next();
 }

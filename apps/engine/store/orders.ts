@@ -1,4 +1,4 @@
-import type { Order, Position, RiskConfig } from "./types";
+import type { Order, Position, RiskConfig } from "@repo/common/types";
 import { PositionStore } from "./positions";
 
 export class OrderStore {
@@ -51,7 +51,7 @@ export class OrderStore {
       const position: Position = {
         positionId: crypto.randomUUID(),
         emailId: order.emailId,
-        symbol: order.symbol,
+        asset: order.asset,
         side: order.side,
         size: order.size,
         openPrice: executionPrice,

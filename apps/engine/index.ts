@@ -1,14 +1,12 @@
-import {
-  UserBalanceStore,
-  PositionStore,
-  OrderStore,
-  type RiskConfig,
-} from "./store";
+import { UserBalanceStore, PositionStore, OrderStore } from "./store";
 import {
   QUEUE_NAMES,
   CONSUMER_GROUPS,
   streamHelpers,
   redisClient,
+  type RiskConfig,
+  type Asset,
+  type AssetPrice,
 } from "@repo/common";
 import { fieldsToObjects, type StreamRead } from "./utils";
 
@@ -25,6 +23,30 @@ class TradingEngine {
   private userBalanceStore: UserBalanceStore;
   private positionStore: PositionStore;
   private orderStore: OrderStore;
+
+  private readonly DECIMALS = 6;
+
+  private latestAssetPrice: Record<Asset, AssetPrice> = {
+    SOL_USDC: {
+      askPrice: 0n,
+      bidPrice: 0n,
+      decimals: this.DECIMALS,
+    },
+    BTC_USDC: {
+      askPrice: 0n,
+      bidPrice: 0n,
+      decimals: this.DECIMALS,
+    },
+    ETH_USDC: {
+      askPrice: 0n,
+      bidPrice: 0n,
+      decimals: this.DECIMALS,
+    },
+  };
+
+  private lastSnapshot: number = Date.now();
+  private readonly dbName = "xltraiding-snapshot";
+  private readonly streamKey = "";
 
   constructor() {
     this.userBalanceStore = new UserBalanceStore();
@@ -217,7 +239,7 @@ class TradingEngine {
   private async executeTrade(trade: any) {
     try {
       console.log(
-        `Executing ${trade.side} ${trade.quantity} ${trade.symbol} at ${trade.price}`
+        `Executing ${trade.side} ${trade.quantity} ${trade.asset} at ${trade.price}`
       );
 
       const validation = this.orderStore.validateOrder(
@@ -239,6 +261,12 @@ class TradingEngine {
         console.error(`Order execution failed: ${execution.error}`);
         return;
       }
+
+      // Persist order and position data to Redis
+      if (execution.position) {
+        await this.persistPositionToRedis(execution.position);
+      }
+      await this.persistOrderToRedis(trade);
 
       await streamHelpers.addToStream(QUEUE_NAMES.SENDER, {
         type: "trade_result",
@@ -262,19 +290,128 @@ class TradingEngine {
 
       // Initialize or update user balance
       if (wallet.type === "deposit") {
-        this.userBalanceStore.initializeUserBalance(
+        const balance = this.userBalanceStore.initializeUserBalance(
           wallet.emailId,
           BigInt(wallet.amount)
         );
+
+        // Persist to Redis for server queries
+        await this.persistBalanceToRedis(balance);
       } else if (wallet.type === "update") {
         // Handle balance updates
         const currentBalance = this.userBalanceStore.getBalance(wallet.emailId);
         if (currentBalance) {
           console.log(`Current balance: ${currentBalance.availableBalance}`);
+          await this.persistBalanceToRedis(currentBalance);
         }
       }
     } catch (error) {
       console.error("error updating wallet: ", error);
+    }
+  }
+
+  // Helper method to persist balance data to Redis
+  private async persistBalanceToRedis(balance: any) {
+    try {
+      const balanceKey = `user_balance:${balance.emailId}`;
+      await redisClient.hset(balanceKey, {
+        availableBalance: balance.availableBalance.toString(),
+        lockedMargin: balance.lockedMargin.toString(),
+        totalBalance: balance.totalBalance.toString(),
+        lastUpdated: balance.lastUpdated.toString(),
+      });
+
+      // Set expiration (optional) - 24 hours
+      await redisClient.expire(balanceKey, 86400);
+
+      console.log(`Balance persisted to Redis for ${balance.emailId}`);
+    } catch (error) {
+      console.error("Error persisting balance to Redis:", error);
+    }
+  }
+
+  // Helper method to persist order data to Redis
+  private async persistOrderToRedis(order: any) {
+    try {
+      const ordersKey = `user_orders:${order.emailId}`;
+
+      // Add order to user's order list (most recent first)
+      await redisClient.lpush(
+        ordersKey,
+        JSON.stringify({
+          orderId: order.orderId,
+          asset: order.asset,
+          side: order.side,
+          orderType: order.orderType,
+          size: order.size,
+          leverage: order.leverage,
+          executedPrice: order.executedPrice?.toString(),
+          status: order.status,
+          timestamp: order.timestamp,
+          executedAt: order.executedAt,
+        })
+      );
+
+      // Keep only last 100 orders
+      await redisClient.ltrim(ordersKey, 0, 99);
+
+      // Set expiration - 30 days
+      await redisClient.expire(ordersKey, 2592000);
+
+      console.log(`Order ${order.orderId} persisted to Redis`);
+    } catch (error) {
+      console.error("Error persisting order to Redis:", error);
+    }
+  }
+
+  // Helper method to persist position data to Redis
+  private async persistPositionToRedis(position: any) {
+    try {
+      const positionsKey = `user_positions:${position.emailId}`;
+
+      // Store position data
+      const positionData = {
+        positionId: position.positionId,
+        asset: position.asset,
+        side: position.side,
+        size: position.size.toString(),
+        openPrice: position.openPrice.toString(),
+        leverage: position.leverage,
+        margin: position.margin.toString(),
+        status: position.status,
+        realizedPnl: position.realizedPnl.toString(),
+        openedAt: position.openedAt,
+        closedAt: position.closedAt,
+        closedPrice: position.closedPrice?.toString(),
+        liquidationPrice: position.liquidationPrice.toString(),
+      };
+
+      if (position.status === "open") {
+        // Add to active positions
+        await redisClient.lpush(positionsKey, JSON.stringify(positionData));
+      } else {
+        // Update existing position when closed
+        const positions = await redisClient.lrange(positionsKey, 0, -1);
+
+        for (let i = 0; i < positions.length; i++) {
+          const pos = JSON.parse(positions[i]!);
+          if (pos.positionId === position.positionId) {
+            await redisClient.lset(
+              positionsKey,
+              i,
+              JSON.stringify(positionData)
+            );
+            break;
+          }
+        }
+      }
+
+      // Set expiration - 30 days
+      await redisClient.expire(positionsKey, 2592000);
+
+      console.log(`Position ${position.positionId} persisted to Redis`);
+    } catch (error) {
+      console.error("Error persisting position to Redis:", error);
     }
   }
 
