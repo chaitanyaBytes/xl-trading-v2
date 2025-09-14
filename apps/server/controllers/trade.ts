@@ -61,10 +61,10 @@ export const openOrder = async (req: Request, res: Response) => {
     };
 
     // Send order to trade_receive stream for processing by engine
-    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
-      type: "trade-open",
+    await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       reqId: reqId,
-      orderData,
+      type: "trade-open",
+      data: orderData,
     });
 
     console.log(`Order ${orderId} submitted to trade stream`);
@@ -182,11 +182,10 @@ export const cancelPendingOrder = async (req: Request, res: Response) => {
 
     const reqId = Date.now.toString() + crypto.randomUUID();
 
-    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
-      type: "order-cancel",
+    await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       reqId,
-      emailId: userEmail,
-      orderId,
+      type: "order-cancel",
+      data: { emailId: userEmail, orderId },
     });
 
     console.log(`cancel order req for ${orderId} submitted`);
@@ -235,11 +234,10 @@ export const closePosition = async (req: Request, res: Response) => {
     const reqId = Date.now().toString() + crypto.randomUUID();
 
     // Send close order to trade_receive stream
-    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
+    await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       type: "position-close",
       reqId,
-      emailId: userEmail,
-      positionId,
+      data: { emailId: userEmail, positionId },
     });
 
     console.log(`Close position req submitted for position ${positionId}`);

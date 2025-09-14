@@ -10,10 +10,10 @@ export const blockingClient = new Redis(REDIS_URL);
 export const pubSubClient = new Redis(REDIS_URL);
 
 export const QUEUE_NAMES = {
-  TRADE_RECEIVE: "trade_receive_stream",
-  WALLET_RECEIVE: "wallet_receive_stream",
-  SENDER: "sender_stream",
-  PRICE_UPDATES: "price_stream",
+  REQUEST_QUEUE: "stream:app:request",
+  RESPONSE_QUEUE: "stream:engine:response",
+  // WALLET_RECEIVE: "wallet_receive_stream",
+  // PRICE_UPDATES: "price_stream",
 } as const;
 
 export const CONSUMER_GROUPS = {
@@ -22,21 +22,35 @@ export const CONSUMER_GROUPS = {
   LOGGING: "logging_group",
 } as const;
 
+export const objectsToFields = (payload: any): (string | number)[] => {
+  const fields: (string | number)[] = Object.entries(payload)
+    .flat()
+    .map((e) =>
+      typeof e === "object"
+        ? JSON.stringify(e, (k, v) => {
+            return typeof v === "bigint" ? v.toString() : v;
+          })
+        : e
+    ) as (string | number)[];
+
+  return fields;
+};
+
 export const streamHelpers = {
-  addToStream: (streamName: string, data: any) =>
-    redisClient.xadd(
+  addToStream: (streamName: string, payload: any) => {
+    const fields: (string | number)[] = objectsToFields(payload);
+
+    return redisClient.xadd(
       streamName,
       "MAXLEN",
       "~",
       "10000", // Keep last 10k messages
       "*",
-      "data",
-      JSON.stringify(data, (k, v) => {
-        return typeof v === "bigint" ? v.toString() : v;
-      }),
+      ...fields,
       "timestamp",
       Date.now().toString()
-    ),
+    );
+  },
 
   createConsumerGroup: async (streamName: string, groupName: string) => {
     try {

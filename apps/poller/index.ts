@@ -38,14 +38,12 @@ setInterval(async () => {
     const payload = {
       reqId: "no-return",
       type: "price-update",
-      tradePrices: JSON.stringify(price_updates, (k, v) => {
-        return typeof v === "bigint" ? v.toString() : v;
-      }),
+      data: price_updates,
     };
 
     console.log("payload: ", payload);
 
     // pass data to redis streams using helper
-    await streamHelpers.addToStream(QUEUE_NAMES.PRICE_UPDATES, payload);
+    await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, payload);
   }
 }, 100);

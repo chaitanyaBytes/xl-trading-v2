@@ -5,7 +5,6 @@ import {
   streamHelpers,
 } from "@repo/common";
 import type { Request, Response } from "express";
-import { success } from "zod";
 
 // Get user's asset balance (synchronous query)
 export const getAssetBalance = async (req: Request, res: Response) => {
@@ -126,11 +125,10 @@ export const depositUsdc = async (req: Request, res: Response) => {
       decimals: 6,
     };
 
-    await streamHelpers.addToStream(QUEUE_NAMES.WALLET_RECEIVE, {
+    await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       type: "deposit",
       reqId,
-      emailId: userEmail,
-      data,
+      data: { emailId: userEmail, data },
     });
 
     console.log(`Deposit request ${reqId} submitted to wallet stream`);

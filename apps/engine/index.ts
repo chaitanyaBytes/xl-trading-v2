@@ -58,35 +58,28 @@ class TradingEngine {
 
   async start() {
     this.isRunning = true;
-    console.log("Trading engin started");
+    console.log("Trading engine started");
 
     await this.initializeConsumerGroups();
 
-    await Promise.all([
-      this.proccessPriceStream(),
-      this.processTradeStream(),
-      this.processWalletStream(),
-    ]);
+    await this.processRequestStream();
+
+    // await Promise.all([
+    //   this.proccessPriceStream(),
+    //   this.processTradeStream(),
+    //   this.processWalletStream(),
+    // ]);
   }
 
   private async initializeConsumerGroups() {
-    console.log("Initialising consumer groups...");
+    console.log("Initialising consumer group..");
 
     await streamHelpers.createConsumerGroup(
-      QUEUE_NAMES.TRADE_RECEIVE,
+      QUEUE_NAMES.REQUEST_QUEUE,
       CONSUMER_GROUPS.ENGINE
     );
 
-    await streamHelpers.createConsumerGroup(
-      QUEUE_NAMES.WALLET_RECEIVE,
-      CONSUMER_GROUPS.ENGINE
-    );
-    await streamHelpers.createConsumerGroup(
-      QUEUE_NAMES.PRICE_UPDATES,
-      CONSUMER_GROUPS.ENGINE
-    );
-
-    console.log("Consumer groups initialized");
+    console.log("Consumer group initialized");
   }
 
   async stop() {
@@ -94,18 +87,18 @@ class TradingEngine {
     console.log("Tradnig engine stopped");
   }
 
-  private async processTradeStream() {
-    const consumerName = `engine-trade-${Date.now()}`;
+  private async processRequestStream() {
+    const consumerName = `engine-${Date.now()}`;
 
     while (this.isRunning) {
-      console.log("waiting for trade stream");
+      console.log("waiting for incoming request");
       try {
         const result = (await streamHelpers.readFromStreamGroup(
-          QUEUE_NAMES.TRADE_RECEIVE,
+          QUEUE_NAMES.REQUEST_QUEUE,
           CONSUMER_GROUPS.ENGINE,
           consumerName,
           1,
-          5000
+          1000
         )) as StreamRead | null;
 
         if (!result || result.length === 0) continue;
@@ -114,123 +107,34 @@ class TradingEngine {
           for (const [id, fields] of entries) {
             try {
               const kv = fieldsToObjects(fields);
-              const payload = kv["data"] ?? "{}";
-              const tradeData = JSON.parse(payload);
+              const type = kv["type"];
+              const reqId = kv["reqId"];
+              const data = kv["data"];
+              const parsedData = JSON.parse(data!);
 
-              console.log("Processing trade: ", tradeData);
-
-              await this.executeTrade(tradeData);
+              console.log("reqId", reqId, "type:", type);
+              switch (type!) {
+                case "price-update":
+                  console.log("price data: ", parsedData);
+                  // await this.handlePriceUpdate(priceData);
+                  break;
+                default:
+                  console.log("data: ", parsedData);
+                  break;
+              }
 
               await streamHelpers.ackMessage(
-                QUEUE_NAMES.TRADE_RECEIVE,
+                QUEUE_NAMES.REQUEST_QUEUE,
                 CONSUMER_GROUPS.ENGINE,
                 id
               );
-
-              console.log(`Trade ${id} processed and acknowledged`);
             } catch (error) {
-              console.error(`Error in processing trade ${id}: `, error);
+              console.error("Error processing message:", error);
             }
           }
         }
       } catch (error) {
-        console.error("Error reading trade stream: ", error);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-  }
-
-  private async processWalletStream() {
-    const consumerName = `engine-wallet-${Date.now()}`;
-
-    while (this.isRunning) {
-      console.log("waiting for wallet stream");
-      try {
-        const result = (await streamHelpers.readFromStreamGroup(
-          QUEUE_NAMES.WALLET_RECEIVE,
-          CONSUMER_GROUPS.ENGINE,
-          consumerName,
-          1,
-          5000
-        )) as StreamRead | null;
-
-        if (!result || result.length === 0) continue;
-
-        for (const [, entries] of result) {
-          for (const [id, fields] of entries) {
-            try {
-              const kv = fieldsToObjects(fields);
-              const payload = kv["data"] ?? "{}";
-              const walletData = JSON.parse(payload);
-
-              console.log("Processing wallet update: ", walletData);
-
-              await this.updateWallet(walletData);
-
-              await streamHelpers.ackMessage(
-                QUEUE_NAMES.WALLET_RECEIVE,
-                CONSUMER_GROUPS.ENGINE,
-                id
-              );
-
-              console.log(`Wallet update ${id} processed`);
-            } catch (error) {
-              console.log(`Error processing wallet ${id}: ${error}`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error reading trade stream: ", error);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-  }
-
-  private async proccessPriceStream() {
-    const consumerName = `engine-price-${Date.now()}`;
-
-    while (this.isRunning) {
-      console.log("waiting for price feed");
-      try {
-        const result = (await streamHelpers.readFromStreamGroup(
-          QUEUE_NAMES.PRICE_UPDATES,
-          CONSUMER_GROUPS.ENGINE,
-          consumerName,
-          10, // Read up to 10 messages at once
-          1000 // 1 second timeout
-        )) as StreamRead | null;
-
-        if (!result || result.length === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          continue;
-        }
-
-        for (const [, entries] of result) {
-          for (const [id, fields] of entries) {
-            try {
-              const kv = fieldsToObjects(fields);
-              const payload = kv["data"] ?? "{}";
-              const priceData = JSON.parse(payload);
-
-              console.log("Price Data: ", priceData);
-
-              await this.handlePriceUpdate(priceData);
-
-              // Acknowledge the message
-              await streamHelpers.ackMessage(
-                QUEUE_NAMES.PRICE_UPDATES,
-                CONSUMER_GROUPS.ENGINE,
-                id
-              );
-
-              console.log(`Price update ${id} processed and acknowledged`);
-            } catch (error) {
-              console.error(`Error processing price update ${id}:`, error);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error in processing price stream: ", error);
+        console.log("Error reading request from request stream");
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
@@ -268,7 +172,7 @@ class TradingEngine {
       }
       await this.persistOrderToRedis(trade);
 
-      await streamHelpers.addToStream(QUEUE_NAMES.SENDER, {
+      await streamHelpers.addToStream(QUEUE_NAMES.RESPONSE_QUEUE, {
         type: "trade_result",
         tradeId: trade.orderId,
         status: "executed",
