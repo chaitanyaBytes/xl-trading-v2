@@ -4,6 +4,7 @@ import {
   getOrderHistory,
   getPositions,
   closePosition,
+  cancelPendingOrder,
 } from "../controllers/trade";
 import { authMiddleware } from "../middleware/authMiddlware";
 
@@ -12,6 +13,8 @@ const tradeRouter = express.Router();
 tradeRouter.use(authMiddleware);
 
 tradeRouter.post("/order", openOrder);
+
+tradeRouter.post("/orders/:orderId/cancel", cancelPendingOrder);
 
 tradeRouter.get("/orders", getOrderHistory);
 

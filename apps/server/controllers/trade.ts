@@ -185,7 +185,7 @@ export const cancelPendingOrder = async (req: Request, res: Response) => {
     await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
       type: "order-cancel",
       reqId,
-      userEmail,
+      emailId: userEmail,
       orderId,
     });
 
@@ -238,7 +238,7 @@ export const closePosition = async (req: Request, res: Response) => {
     await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
       type: "position-close",
       reqId,
-      userEmail,
+      emailId: userEmail,
       positionId,
     });
 

@@ -1,5 +1,11 @@
-import { redisClient } from "@repo/common";
+import {
+  depositSchema,
+  QUEUE_NAMES,
+  redisClient,
+  streamHelpers,
+} from "@repo/common";
 import type { Request, Response } from "express";
+import { success } from "zod";
 
 // Get user's asset balance (synchronous query)
 export const getAssetBalance = async (req: Request, res: Response) => {
@@ -84,6 +90,67 @@ export const getUsdcBalance = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: `Error in getting USDC balance: ${error}`,
+    });
+  }
+};
+
+export const depositUsdc = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    const validation = depositSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid deposit amount: " + validation.error,
+      });
+      return;
+    }
+
+    const { amount } = validation.data;
+
+    const reqId = Date.now().toString() + crypto.randomUUID();
+
+    const data = {
+      asset: "USDC",
+      amount: BigInt(Math.round(amount * 1000000)).toString(),
+      decimals: 6,
+    };
+
+    await streamHelpers.addToStream(QUEUE_NAMES.WALLET_RECEIVE, {
+      type: "deposit",
+      reqId,
+      emailId: userEmail,
+      data,
+    });
+
+    console.log(`Deposit request ${reqId} submitted to wallet stream`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        reqId,
+        amount,
+        asset: "USDC",
+        status: "submitted",
+        message: "Deposit request submitted for processing",
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    console.log("error in depositing usdc: ", error);
+    res.status(500).json({
+      success: false,
+      error: "Error in depositing usdc",
     });
   }
 };

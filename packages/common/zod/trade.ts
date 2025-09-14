@@ -55,3 +55,11 @@ export type CloseOrder = z.infer<typeof closeOrderSchema>;
 export const closePositionSchema = z.object({ positionId: z.string() });
 
 export type ClosePosition = z.infer<typeof closePositionSchema>;
+
+export const depositSchema = z.object({
+  amount: z
+    .number()
+    .positive("Amount must be greater than 0")
+    .max(1000000, "Amount cannot exceed $1,000,000")
+    .multipleOf(0.01, "Amount must have at most 2 decimal places"),
+});
