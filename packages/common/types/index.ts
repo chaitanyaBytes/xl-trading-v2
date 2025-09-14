@@ -18,7 +18,6 @@ export interface Order {
   orderId: string;
   emailId: string;
   asset: string;
-  type: "open" | "close";
   side: "buy" | "sell";
   orderType: "market" | "limit";
   size: bigint;

@@ -28,6 +28,7 @@ export const openOrder = async (req: Request, res: Response) => {
         success: false,
         error: `Invalid input: ${validation.error}`,
       });
+      return;
     }
 
     const order: CreateOrder = validation.data!;
@@ -43,13 +44,13 @@ export const openOrder = async (req: Request, res: Response) => {
 
     // Generate unique order ID
     const orderId = `order_${Date.now()}_${crypto.randomUUID()}`;
+    const reqId = Date.now().toString() + crypto.randomUUID();
 
     // Create order object
     const orderData: Order = {
       orderId,
       emailId: userEmail,
       asset: order.asset,
-      type: "open", // or "close" for closing positions
       side: order.side, // "buy" or "sell"
       orderType: order.orderType, // "market" or "limit"
       size: BigInt(order.size), // Convert to string for Redis
@@ -60,7 +61,11 @@ export const openOrder = async (req: Request, res: Response) => {
     };
 
     // Send order to trade_receive stream for processing by engine
-    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, orderData);
+    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
+      type: "trade-open",
+      reqId: reqId,
+      orderData,
+    });
 
     console.log(`Order ${orderId} submitted to trade stream`);
 
@@ -153,6 +158,57 @@ export const getPositions = async (req: Request, res: Response) => {
   }
 };
 
+export const cancelPendingOrder = async (req: Request, res: Response) => {
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    res.status(401).json({
+      success: false,
+      error: "User not authenticated",
+    });
+    return;
+  }
+
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      res.status(400).json({
+        success: false,
+        error: "Order ID is required",
+      });
+      return;
+    }
+
+    const reqId = Date.now.toString() + crypto.randomUUID();
+
+    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
+      type: "order-cancel",
+      reqId,
+      userEmail,
+      orderId,
+    });
+
+    console.log(`cancel order req for ${orderId} submitted`);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orderId,
+        status: "submitted",
+        message: "Cancel order submitted for processing",
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    console.log("Error in cancelling the order: ", error);
+    res.status(500).json({
+      success: false,
+      error: `Error cancelling order: ${error}`,
+    });
+  }
+};
+
 // Close a position
 export const closePosition = async (req: Request, res: Response) => {
   const userEmail = req.user?.email;
@@ -176,30 +232,24 @@ export const closePosition = async (req: Request, res: Response) => {
     }
 
     // Generate close order
-    const orderId = `close_${Date.now()}_${crypto.randomUUID()}`;
-
-    const closeOrderData = {
-      orderId,
-      emailId: userEmail,
-      type: "close",
-      positionId,
-      orderType: "market", // Close at market price
-      status: "pending",
-      timestamp: Date.now(),
-    };
+    const reqId = Date.now().toString() + crypto.randomUUID();
 
     // Send close order to trade_receive stream
-    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, closeOrderData);
+    await streamHelpers.addToStream(QUEUE_NAMES.TRADE_RECEIVE, {
+      type: "position-close",
+      reqId,
+      userEmail,
+      positionId,
+    });
 
-    console.log(`Close order ${orderId} submitted for position ${positionId}`);
+    console.log(`Close position req submitted for position ${positionId}`);
 
     res.status(200).json({
       success: true,
       data: {
-        orderId,
         positionId,
         status: "submitted",
-        message: "Close order submitted for processing",
+        message: "close position submitted for processing",
         timestamp: Date.now(),
       },
     });
