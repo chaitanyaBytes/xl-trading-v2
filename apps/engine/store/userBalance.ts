@@ -1,4 +1,4 @@
-import { type UserBalance } from "./types";
+import { type UserBalance } from "@repo/common";
 
 export class UserBalanceStore {
   private userBalances = new Map<string, UserBalance>();

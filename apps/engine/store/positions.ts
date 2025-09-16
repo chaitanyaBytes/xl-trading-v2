@@ -1,5 +1,5 @@
 import { DECIMALS } from "./assets";
-import type { Position, RiskConfig } from "./types";
+import type { Position, RiskConfig } from "@repo/common";
 import { UserBalanceStore } from "./userBalance";
 
 export class PositionStore {

@@ -1,4 +1,4 @@
-import type { Asset, AssetPrice } from "./types";
+import type { Asset, AssetPrice } from "@repo/common";
 
 export const DECIMALS = 6;
 

@@ -1,7 +1,7 @@
 import { DECIMALS, pricePoller } from "./lib/backpack";
 import { latestPrices } from "./store";
 import { streamHelpers, QUEUE_NAMES } from "@repo/common";
-import type { LivePriceFeed } from "./types";
+import type { LivePriceFeed } from "@repo/common";
 
 const PAIRS = ["BTC_USDC", "SOL_USDC", "ETH_USDC"];
 

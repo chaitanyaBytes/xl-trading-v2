@@ -12,7 +12,7 @@ const tradeRouter = express.Router();
 
 tradeRouter.use(authMiddleware);
 
-tradeRouter.post("/order", openOrder);
+tradeRouter.post("/order/open", openOrder);
 
 tradeRouter.post("/orders/:orderId/cancel", cancelPendingOrder);
 

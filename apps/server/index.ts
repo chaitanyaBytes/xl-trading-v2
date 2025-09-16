@@ -1,5 +1,6 @@
 import experss from "express";
 import type { Request, Response } from "express";
+import cookieParser from "cookie-parser";
 import cors, { type CorsOptions } from "cors";
 import { DEVELOPMENT_URL, NODE_ENV, PORT, PRODUCTION_URL } from "./config";
 import router from "./routes";
@@ -7,6 +8,7 @@ import router from "./routes";
 const app = experss();
 
 app.use(experss.json());
+app.use(cookieParser());
 
 const corsOptions: CorsOptions = {
   origin: NODE_ENV === "production" ? PRODUCTION_URL : DEVELOPMENT_URL,

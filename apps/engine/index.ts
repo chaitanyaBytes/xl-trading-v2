@@ -7,6 +7,7 @@ import {
   type RiskConfig,
   type Asset,
   type AssetPrice,
+  type MessageType,
 } from "@repo/common";
 import { fieldsToObjects, type StreamRead } from "./utils";
 
@@ -63,12 +64,6 @@ class TradingEngine {
     await this.initializeConsumerGroups();
 
     await this.processRequestStream();
-
-    // await Promise.all([
-    //   this.proccessPriceStream(),
-    //   this.processTradeStream(),
-    //   this.processWalletStream(),
-    // ]);
   }
 
   private async initializeConsumerGroups() {
@@ -98,7 +93,7 @@ class TradingEngine {
           CONSUMER_GROUPS.ENGINE,
           consumerName,
           1,
-          1000
+          0
         )) as StreamRead | null;
 
         if (!result || result.length === 0) continue;
@@ -106,10 +101,10 @@ class TradingEngine {
         for (const [, entries] of result) {
           for (const [id, fields] of entries) {
             try {
-              const kv = fieldsToObjects(fields);
-              const type = kv["type"];
-              const reqId = kv["reqId"];
-              const data = kv["data"];
+              const kv: MessageType = fieldsToObjects(fields);
+              const type = kv.type;
+              const reqId = kv.reqId;
+              const data = kv.data;
               const parsedData = JSON.parse(data!);
 
               console.log("reqId", reqId, "type:", type);
@@ -118,6 +113,11 @@ class TradingEngine {
                   console.log("price data: ", parsedData);
                   // await this.handlePriceUpdate(priceData);
                   break;
+                case "open-order":
+                  console.log("open order data: ", parsedData);
+                  this.executeTrade(parsedData, reqId!);
+                  break;
+
                 default:
                   console.log("data: ", parsedData);
                   break;
@@ -140,44 +140,43 @@ class TradingEngine {
     }
   }
 
-  private async executeTrade(trade: any) {
+  private async executeTrade(trade: any, reqId: string) {
     try {
       console.log(
-        `Executing ${trade.side} ${trade.quantity} ${trade.asset} at ${trade.price}`
+        `Executing ${trade.side} ${trade.size} ${trade.asset} at ${trade.price}`
       );
 
-      const validation = this.orderStore.validateOrder(
-        trade,
-        BigInt(trade.userBalance || 0)
-      );
+      // const validation = this.orderStore.validateOrder(
+      //   trade,
+      //   BigInt(trade.userBalance || 0)
+      // );
 
-      if (!validation.valid) {
-        console.error(`Order Validation failed: ${validation.error}`);
-        return;
-      }
+      // if (!validation.valid) {
+      //   console.error(`Order Validation failed: ${validation.error}`);
+      //   return;
+      // }
 
-      const execution = this.orderStore.executeOrder(
-        trade,
-        BigInt(trade.price || 0)
-      );
+      // const execution = this.orderStore.executeOrder(
+      //   trade,
+      //   BigInt(trade.price || 0)
+      // );
 
-      if (!execution.success) {
-        console.error(`Order execution failed: ${execution.error}`);
-        return;
-      }
+      // if (!execution.success) {
+      //   console.error(`Order execution failed: ${execution.error}`);
+      //   return;
+      // }
 
-      // Persist order and position data to Redis
-      if (execution.position) {
-        await this.persistPositionToRedis(execution.position);
-      }
-      await this.persistOrderToRedis(trade);
+      // // Persist order and position data to Redis
+      // if (execution.position) {
+      //   await this.persistPositionToRedis(execution.position);
+      // }
+      // await this.persistOrderToRedis(trade);
 
       await streamHelpers.addToStream(QUEUE_NAMES.RESPONSE_QUEUE, {
-        type: "trade_result",
-        tradeId: trade.orderId,
-        status: "executed",
-        position: execution.position,
-        timestamp: Date.now(),
+        type: "open-order-ack",
+        reqId: reqId,
+        orderId: "123",
+        order: "order executed",
       });
 
       console.log("Trade executed successfully");

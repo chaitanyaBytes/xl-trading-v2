@@ -4,12 +4,13 @@ import {
   redisClient,
   createOrderSchema,
   type CreateOrder,
-  type Order,
 } from "@repo/common";
 import type { Request, Response } from "express";
+import { responseLoopObj } from "../utils/responseLoop";
 
-// Place a new trade order
+// place market or limit order
 export const openOrder = async (req: Request, res: Response) => {
+  const startTime = Date.now();
   const userEmail = req.user?.email;
 
   if (!userEmail) {
@@ -31,10 +32,9 @@ export const openOrder = async (req: Request, res: Response) => {
       return;
     }
 
-    const order: CreateOrder = validation.data!;
+    const orderData: CreateOrder = validation.data!;
 
-    // Validate order type specific fields
-    if (order.orderType === "limit" && !order.limitPrice) {
+    if (orderData.orderType === "limit" && !orderData.limitPrice) {
       res.status(400).json({
         success: false,
         error: "Limit price required for limit orders",
@@ -42,41 +42,33 @@ export const openOrder = async (req: Request, res: Response) => {
       return;
     }
 
-    // Generate unique order ID
-    const orderId = `order_${Date.now()}_${crypto.randomUUID()}`;
     const reqId = Date.now().toString() + crypto.randomUUID();
 
-    // Create order object
-    const orderData: Order = {
-      orderId,
-      emailId: userEmail,
-      asset: order.asset,
-      side: order.side, // "buy" or "sell"
-      orderType: order.orderType, // "market" or "limit"
-      size: BigInt(order.size), // Convert to string for Redis
-      leverage: order.leverage,
-      limitPrice: order.limitPrice ? BigInt(order.limitPrice) : undefined,
-      status: "pending",
-      timestamp: Date.now(),
-    };
-
-    // Send order to trade_receive stream for processing by engine
     await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       reqId: reqId,
-      type: "trade-open",
-      data: orderData,
+      type: "open-order",
+      data: { userId: userEmail, orderData },
     });
 
-    console.log(`Order ${orderId} submitted to trade stream`);
+    console.log(`Order ${reqId} submitted to trade stream`);
 
-    // Return immediate response with order ID
+    const response = await responseLoopObj.waitForResposne(reqId);
+
+    const { order, orderId } = JSON.parse(response!);
+    console.log(orderId, order);
+
     res.status(200).json({
       success: true,
       data: {
-        orderId,
-        status: "submitted",
-        message: "Order submitted for processing",
+        status: orderData.orderType === "limit" ? "pending" : "filled",
+        message:
+          orderData.orderType === "limit"
+            ? "limit order placed"
+            : "market order placed",
+        orderId: orderId,
+        order: order,
         timestamp: Date.now(),
+        endTime: Date.now() - startTime,
       },
     });
   } catch (error) {
@@ -158,6 +150,7 @@ export const getPositions = async (req: Request, res: Response) => {
   }
 };
 
+// cancel pending limit order
 export const cancelPendingOrder = async (req: Request, res: Response) => {
   const userEmail = req.user?.email;
 
@@ -184,18 +177,21 @@ export const cancelPendingOrder = async (req: Request, res: Response) => {
 
     await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
       reqId,
-      type: "order-cancel",
+      type: "cancel-order",
       data: { emailId: userEmail, orderId },
     });
 
     console.log(`cancel order req for ${orderId} submitted`);
 
+    const response = await responseLoopObj.waitForResposne(reqId);
+
+    // const {} = JSON.parse(response!);
+
     res.status(200).json({
       success: true,
       data: {
         orderId,
-        status: "submitted",
-        message: "Cancel order submitted for processing",
+        message: "Limit Order Cancelled",
         timestamp: Date.now(),
       },
     });
@@ -208,7 +204,7 @@ export const cancelPendingOrder = async (req: Request, res: Response) => {
   }
 };
 
-// Close a position
+// Close an open position
 export const closePosition = async (req: Request, res: Response) => {
   const userEmail = req.user?.email;
   const { positionId } = req.params;
@@ -230,24 +226,23 @@ export const closePosition = async (req: Request, res: Response) => {
       return;
     }
 
-    // Generate close order
     const reqId = Date.now().toString() + crypto.randomUUID();
 
-    // Send close order to trade_receive stream
     await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
-      type: "position-close",
+      type: "close-position",
       reqId,
       data: { emailId: userEmail, positionId },
     });
 
     console.log(`Close position req submitted for position ${positionId}`);
 
+    const response = await responseLoopObj.waitForResposne(reqId);
+
     res.status(200).json({
       success: true,
       data: {
         positionId,
-        status: "submitted",
-        message: "close position submitted for processing",
+        message: "Position closed",
         timestamp: Date.now(),
       },
     });
