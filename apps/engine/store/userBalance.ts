@@ -9,10 +9,10 @@ export class UserBalanceStore {
 
   initializeUserBalance(emailId: string, initialBalance: bigint): UserBalance {
     const balance: UserBalance = {
-      emailId: emailId,
+      email: emailId,
       availableBalance: initialBalance,
       lockedMargin: 0n,
-      totalBalance: 0n,
+      totalBalance: initialBalance,
       lastUpdated: Date.now(),
     };
 
@@ -26,6 +26,8 @@ export class UserBalanceStore {
     if (!userBalance) return false;
 
     userBalance.availableBalance += amount;
+    userBalance.totalBalance += amount;
+    userBalance.lastUpdated = Date.now();
     this.userBalances.set(emailId, userBalance);
     return true;
   }

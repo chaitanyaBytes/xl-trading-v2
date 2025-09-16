@@ -15,7 +15,13 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  lastLoggedIn DateTime?
+  id               String    @id @default(uuid())
+  email            String    @unique
+  availableBalance String    @default("0")
+  lockedBalance    String    @default("0")
+  totalBalance     String    @default("0")
+  decimals         Int       @default(6)
+  lastLoggedIn     DateTime?
+  lastUpdated      DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
 }

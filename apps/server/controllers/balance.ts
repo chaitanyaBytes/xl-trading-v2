@@ -5,6 +5,7 @@ import {
   streamHelpers,
 } from "@repo/common";
 import type { Request, Response } from "express";
+import { responseLoopObj } from "../utils/responseLoop";
 
 // Get user's asset balance (synchronous query)
 export const getAssetBalance = async (req: Request, res: Response) => {
@@ -119,28 +120,31 @@ export const depositUsdc = async (req: Request, res: Response) => {
 
     const reqId = Date.now().toString() + crypto.randomUUID();
 
-    const data = {
+    const depositData = {
       asset: "USDC",
       amount: BigInt(Math.round(amount * 1000000)).toString(),
       decimals: 6,
     };
 
     await streamHelpers.addToStream(QUEUE_NAMES.REQUEST_QUEUE, {
-      type: "deposit",
+      type: "user-deposit",
       reqId,
-      data: { emailId: userEmail, data },
+      data: { emailId: userEmail, depositData },
     });
 
     console.log(`Deposit request ${reqId} submitted to wallet stream`);
 
+    const response = await responseLoopObj.waitForResposne(reqId);
+
+    const { userBalance } = JSON.parse(response!);
     res.status(200).json({
       success: true,
       data: {
         reqId,
         amount,
         asset: "USDC",
-        status: "submitted",
         message: "Deposit request submitted for processing",
+        updateBalance: userBalance.availableBalance,
         timestamp: Date.now(),
       },
     });

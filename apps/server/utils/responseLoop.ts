@@ -30,11 +30,18 @@ export class ResponseLoop {
       const reqType = resObj["type"];
       const reqId = resObj["reqId"];
 
-      console.log("reqId: ", reqId, "ReqType: ", reqType);
-      this.idResponseMap[reqId!]?.resolve(
-        JSON.stringify({ orderId: resObj["orderId"], order: resObj["order"] })
-      );
-      delete this.idResponseMap[reqId!];
+      console.log("reqId:", reqId, "ReqType:", reqType);
+      switch (reqType) {
+        case "user-deposit-ack":
+          console.log("data:", resObj["data"]);
+          this.idResponseMap[reqId!]?.resolve(resObj["data"]!);
+          delete this.idResponseMap[reqId!];
+          break;
+        case "user-deposit-err":
+          this.idResponseMap[reqId!]?.reject(resObj["data"]!);
+          break;
+        default:
+      }
     }
   }
 

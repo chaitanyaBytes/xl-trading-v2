@@ -8,6 +8,10 @@ import {
   type Asset,
   type AssetPrice,
   type MessageType,
+  type EngineResponseType,
+  type UserBalance,
+  type UserDepositMsgType,
+  UserDepositMsg,
 } from "@repo/common";
 import { fieldsToObjects, type StreamRead } from "./utils";
 
@@ -101,27 +105,8 @@ class TradingEngine {
         for (const [, entries] of result) {
           for (const [id, fields] of entries) {
             try {
-              const kv: MessageType = fieldsToObjects(fields);
-              const type = kv.type;
-              const reqId = kv.reqId;
-              const data = kv.data;
-              const parsedData = JSON.parse(data!);
-
-              console.log("reqId", reqId, "type:", type);
-              switch (type!) {
-                case "price-update":
-                  console.log("price data: ", parsedData);
-                  // await this.handlePriceUpdate(priceData);
-                  break;
-                case "open-order":
-                  console.log("open order data: ", parsedData);
-                  this.executeTrade(parsedData, reqId!);
-                  break;
-
-                default:
-                  console.log("data: ", parsedData);
-                  break;
-              }
+              const msg: MessageType = fieldsToObjects(fields);
+              await this.handleMessage(msg);
 
               await streamHelpers.ackMessage(
                 QUEUE_NAMES.REQUEST_QUEUE,
@@ -137,6 +122,113 @@ class TradingEngine {
         console.log("Error reading request from request stream");
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+    }
+  }
+
+  private async handleMessage(msg: MessageType): Promise<void> {
+    const type = msg.type;
+    const reqId = msg.reqId;
+    const data = msg.data;
+    const parsedData = JSON.parse(data!);
+
+    console.log("reqId", reqId, "type:", type);
+
+    let res: EngineResponseType | undefined = undefined;
+
+    switch (type!) {
+      case "user-deposit":
+        console.log("user deposit data:", parsedData);
+        res = await this.handleWalletDeposit(UserDepositMsg.parse(msg));
+        break;
+      case "price-update":
+        console.log("price data: ", parsedData);
+        // await this.handlePriceUpdate(priceData);
+        break;
+      case "open-order":
+        console.log("open order data: ", parsedData);
+        this.executeTrade(parsedData, reqId!);
+        break;
+      case "close-order":
+        console.log("order Id:", parsedData);
+        break;
+      case "get-user-bal":
+        break;
+      case "get-asset-bal":
+        break;
+      default:
+        console.log("data: ", parsedData);
+        break;
+    }
+
+    if (res) {
+      await this.sendResponse(res);
+    }
+  }
+
+  private async sendResponse(res: EngineResponseType): Promise<void> {
+    await streamHelpers.addToStream(QUEUE_NAMES.RESPONSE_QUEUE, {
+      type: res.type,
+      reqId: res.reqId,
+      data: res.data,
+    });
+  }
+
+  private async handleWalletDeposit(
+    msg: UserDepositMsgType
+  ): Promise<EngineResponseType> {
+    try {
+      const data = JSON.parse(msg.data);
+
+      const emailId = data.emailId;
+      const amount = BigInt(data.depositData.amount);
+
+      console.log(`updating wallet: ${emailId} with balance ${amount}`);
+
+      let currentBalance = this.userBalanceStore.getBalance(data.emailId);
+
+      if (!currentBalance) {
+        console.log("initialising new wallet for", data.emailId);
+
+        currentBalance = this.userBalanceStore.initializeUserBalance(
+          data.emailId,
+          0n
+        );
+
+        await this.persistBalanceToRedis(currentBalance);
+      }
+
+      if (amount > 0n) {
+        const success = this.userBalanceStore.addBalance(emailId, amount);
+
+        if (success) {
+          const updatedBalance = this.userBalanceStore.getBalance(emailId);
+          if (updatedBalance) {
+            await this.persistBalanceToRedis(updatedBalance);
+            console.log(
+              `Added $${(amount / 1000000n).toString()} to wallet ${emailId}`
+            );
+          }
+        }
+      }
+
+      const finalBalance = this.userBalanceStore.getBalance(emailId);
+
+      return {
+        type: "user-deposit-ack",
+        reqId: msg.reqId,
+        data: {
+          userBalance: finalBalance,
+        },
+      };
+    } catch (error: any) {
+      console.error("Error updating wallet: ", error);
+      return {
+        type: "user-deposit-err",
+        reqId: msg.reqId,
+        data: {
+          error: error.message,
+        },
+      };
     }
   }
 
@@ -185,38 +277,10 @@ class TradingEngine {
     }
   }
 
-  private async updateWallet(wallet: any) {
-    try {
-      console.log(
-        `updating wallet: ${wallet.emailId} balance ${wallet.balance}`
-      );
-
-      // Initialize or update user balance
-      if (wallet.type === "deposit") {
-        const balance = this.userBalanceStore.initializeUserBalance(
-          wallet.emailId,
-          BigInt(wallet.amount)
-        );
-
-        // Persist to Redis for server queries
-        await this.persistBalanceToRedis(balance);
-      } else if (wallet.type === "update") {
-        // Handle balance updates
-        const currentBalance = this.userBalanceStore.getBalance(wallet.emailId);
-        if (currentBalance) {
-          console.log(`Current balance: ${currentBalance.availableBalance}`);
-          await this.persistBalanceToRedis(currentBalance);
-        }
-      }
-    } catch (error) {
-      console.error("error updating wallet: ", error);
-    }
-  }
-
   // Helper method to persist balance data to Redis
-  private async persistBalanceToRedis(balance: any) {
+  private async persistBalanceToRedis(balance: UserBalance) {
     try {
-      const balanceKey = `user_balance:${balance.emailId}`;
+      const balanceKey = `user_balance:${balance.email}`;
       await redisClient.hset(balanceKey, {
         availableBalance: balance.availableBalance.toString(),
         lockedMargin: balance.lockedMargin.toString(),
@@ -227,7 +291,7 @@ class TradingEngine {
       // Set expiration (optional) - 24 hours
       await redisClient.expire(balanceKey, 86400);
 
-      console.log(`Balance persisted to Redis for ${balance.emailId}`);
+      console.log(`Balance persisted to Redis for ${balance.email}`);
     } catch (error) {
       console.error("Error persisting balance to Redis:", error);
     }

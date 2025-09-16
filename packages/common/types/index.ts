@@ -28,7 +28,7 @@ export interface AssetPrice {
 export type Asset = "SOL_USDC" | "ETH_USDC" | "BTC_USDC";
 
 export interface UserBalance {
-  emailId: string;
+  email: string;
   availableBalance: bigint;
   lockedMargin: bigint;
   totalBalance: bigint; // available + locked

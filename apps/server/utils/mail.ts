@@ -8,11 +8,11 @@ import {
 
 const resend = new Resend(RESEND_API_KEY);
 
-export async function sendToEmail(token: string) {
+export async function sendToEmail(email: string, token: string) {
   const url = NODE_ENV === "production" ? PRODUCTION_URL : DEVELOPMENT_URL;
   const { data, error } = await resend.emails.send({
     from: "onboarding@resend.dev",
-    to: ["chaitanyagupta172004@gmail.com"],
+    to: [email],
     subject: "This is your otp to login",
     html: `<center>
         <h1>Click on this link to sign in</h1>
@@ -20,9 +20,5 @@ export async function sendToEmail(token: string) {
     </center>`,
   });
 
-  if (error) {
-    return console.error({ error });
-  }
-
-  console.log({ data });
+  return { data, error };
 }

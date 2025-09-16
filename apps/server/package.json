@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@repo/common": "workspace:*",
+    "@repo/db": "workspace:*",
     "body-parser": "^2.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

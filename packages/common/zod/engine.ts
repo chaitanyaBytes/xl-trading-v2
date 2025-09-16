@@ -6,12 +6,6 @@ export const BaseMsg = z.object({
   data: z.string(),
 });
 
-export const UserAuthMsg = BaseMsg.extend({
-  type: z.enum(["user-signin", "user-signup"]),
-});
-
-export type UserAuthMsgType = z.infer<typeof UserAuthMsg>;
-
 export const PriceUpdateMsg = BaseMsg.extend({
   type: z.literal("price-update"),
 });
@@ -42,8 +36,14 @@ export const GetUserBalMsg = BaseMsg.extend({
 
 export type GetUserBalMsgType = z.infer<typeof GetAssetBalMsg>;
 
+export const UserDepositMsg = BaseMsg.extend({
+  type: z.literal("user-deposit"),
+});
+
+export type UserDepositMsgType = z.infer<typeof UserDepositMsg>;
+
 export const Messageschema = z.discriminatedUnion("type", [
-  UserAuthMsg,
+  UserDepositMsg,
   OpenOrderMsg,
   CloseOrderMsg,
   GetAssetBalMsg,
